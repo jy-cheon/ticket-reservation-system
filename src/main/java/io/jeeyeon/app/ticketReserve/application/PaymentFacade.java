@@ -4,7 +4,10 @@ import io.jeeyeon.app.ticketReserve.domain.common.exception.BaseException;
 import io.jeeyeon.app.ticketReserve.domain.common.exception.ErrorType;
 import io.jeeyeon.app.ticketReserve.domain.concert.ConcertService;
 import io.jeeyeon.app.ticketReserve.domain.payment.Payment;
+import io.jeeyeon.app.ticketReserve.domain.payment.PaymentEvent;
+import io.jeeyeon.app.ticketReserve.domain.payment.PaymentEventPublisher;
 import io.jeeyeon.app.ticketReserve.domain.payment.PaymentService;
+import io.jeeyeon.app.ticketReserve.domain.queueToken.QueueToken;
 import io.jeeyeon.app.ticketReserve.domain.queueToken.QueueTokenService;
 import io.jeeyeon.app.ticketReserve.domain.reservation.Reservation;
 import io.jeeyeon.app.ticketReserve.domain.reservation.ReservationService;
@@ -12,9 +15,13 @@ import io.jeeyeon.app.ticketReserve.domain.seat.Seat;
 import io.jeeyeon.app.ticketReserve.domain.seat.SeatService;
 import io.jeeyeon.app.ticketReserve.domain.seat.SeatStatus;
 import io.jeeyeon.app.ticketReserve.domain.user.UserService;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
@@ -25,6 +32,8 @@ public class PaymentFacade {
     private final QueueTokenService queueTokenService;
     private final UserService userService;
     private final ConcertService concertService;
+    private final PaymentEventPublisher paymentEventPublisher;
+
 
     // 결제
     @Transactional
@@ -50,6 +59,12 @@ public class PaymentFacade {
         queueTokenService.expireQueueToken(concertId, userId);
 
         // 결제 내역 저장
-        return paymentService.save(reservationId, seat.getTicketPrice());
+        Payment payment = paymentService.save(reservationId, seat.getTicketPrice());
+
+        // 결제 이벤트 발행
+        PaymentEvent paymentEvent = new PaymentEvent(payment.getPaymentId(), payment.getReservationId(), userId, payment.getAmount(), LocalDateTime.now());
+        paymentEventPublisher.publish(paymentEvent);
+
+        return payment;
     }
 }

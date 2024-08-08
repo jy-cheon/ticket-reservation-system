@@ -1,7 +1,10 @@
 package io.jeeyeon.app.ticketReserve.application;
 
+import io.jeeyeon.app.ticketReserve.domain.payment.PaymentEvent;
+import io.jeeyeon.app.ticketReserve.domain.reservation.Reservation;
 import io.jeeyeon.app.ticketReserve.domain.reservation.ReservationStatus;
 import io.jeeyeon.app.ticketReserve.domain.seat.SeatStatus;
+import io.jeeyeon.app.ticketReserve.domain.send.DataPlatformSendService;
 import io.jeeyeon.app.ticketReserve.infra.queueToken.QueueTokenEntity;
 import io.jeeyeon.app.ticketReserve.infra.queueToken.QueueTokenJpaRepository;
 import io.jeeyeon.app.ticketReserve.infra.reservation.ReservationEntity;
@@ -20,6 +23,9 @@ import org.springframework.test.context.jdbc.Sql;
 
 import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
 @SpringBootTest
 class PaymentFacadeTest {
 
@@ -37,6 +43,9 @@ class PaymentFacadeTest {
 
     @Autowired
     UserJpaRepository userJpaRepository;
+
+    @Autowired
+    DataPlatformSendService sendService;
 
     @BeforeEach
     void init() {
@@ -78,11 +87,12 @@ class PaymentFacadeTest {
     void payTest() throws Exception {
         //given
         Long reservationId = 1L;
+        Long concertId = 1L;
         Long userId = 1L;
         Long seatId = 1L;
 
         //when
-        paymentFacade.processPayment(reservationId, userId);
+        paymentFacade.processPayment(concertId, reservationId, userId);
 
         //then
         Optional<UserEntity> findUser = userJpaRepository.findById(userId);
@@ -93,6 +103,27 @@ class PaymentFacadeTest {
 
         Optional<ReservationEntity> findReservation = reservationJpaRepository.findById(reservationId);
         Assertions.assertEquals(ReservationStatus.CONFIRMED,findReservation.get().getStatus());
+
+        // 결제 정보 전송 서비스가 호출되었는지 검증.
+        verify(sendService, times(1)).sendPaymentInfo(any(PaymentEvent.class));
+
+    }
+
+    @Test
+    void testProcessPaymentWithInvalidSeat() throws Exception {
+        // Given
+        Long concertId = 1L;
+        Long reservationId = 1L;
+        Long userId = 1L;
+
+        // When
+        // 예약 정보는 정상적으로 반환하지만, 좌석 정보가 없어서 예외가 발생해야 함
+        try {
+            paymentFacade.processPayment(concertId, reservationId, userId);
+        } catch (Exception e) {
+            // 예외가 발생하면 결제 정보 전송 서비스가 호출되지 않아야 함
+            verify(sendService, never()).sendPaymentInfo(any(PaymentEvent.class));
+        }
     }
 
 }
